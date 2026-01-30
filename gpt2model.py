@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import tiktoken
-
+import time
 #-----------------------------------
 
 class CausalSelfAttention(nn.Module):
@@ -242,26 +242,40 @@ elif getattr(torch.backends,'mps') and torch.backends.mps.is_available():
 
 print(f"Running on device : {device}")
 
-train_loader=DataLoaderLite(B=4,T=32)
+train_loader=DataLoaderLite(B=4,T=1024)
+
+#Torch uses TF32
+torch.set_float32_matmul_precision('high')
 
 #model=GPT.from_pretrained('gpt2')
 model=GPT(GPTConfig()) # Our own model
 model.eval()
 model.to(device)
+model=torch.compile(model)
 
 
 
 optimizer=torch.optim.AdamW(model.parameters(),lr=3e-4)
 #Loss calculation by picking next batches
 for i in range(50):
+    t0=time.time()
     x,y=train_loader.next_batch()
     x=x.to(device)
     y=y.to(device)
-    logits,loss=model(x,y)
+
+    #Autocasting forward pass for AMP
+    #Some operations in float32,bfloat16
+    with torch.autocast(device_type=device,dtype=torch.bfloat16):
+        logits,loss=model(x,y)
+
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
-    print(f"step {i} : Loss {loss.item()}")
+    torch.cuda.synchronize()
+    t1=time.time()
+    dt=(t1-t0)*1000 #milliseconds 
+    tokens_per_sec=(train_loader.B * train_loader.T)/(t1-t0)
+    print(f"step {i} | Loss {loss.item():.4f} | Time taken : {dt:.4f} ms | Tokens per sec: {tokens_per_sec:.4f} ")
 
 import sys;sys.exit(0)()
 
