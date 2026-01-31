@@ -385,38 +385,45 @@ for step in range(50):
     if master_process:
         print(f"step {step} | Loss {loss_accum:.4f} | Learning rate : {lr:.4e} | Norm : {norm:.4f} | Time taken : {dt:.4f} ms | Tokens per sec: {tokens_per_sec:.4f} ")
 
+# --- POST-TRAINING SAMPLING ---
+if master_process:
+    print("-" * 30)
+    print("Final Sampling:")
+    model.eval()
+    num_return_sequences = 5
+    max_length = 1000
+    
+    # Use the same encoder as the DataLoader
+    enc = tiktoken.get_encoding('gpt2')
+    tokens = enc.encode("Hello, I am a language model,")
+    x = torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0) # (1, T)
+    
+    # Repeat for multiple sequences
+    x = x.repeat(num_return_sequences, 1) # (5, T)
+    sample_rng = torch.Generator(device=device)
+    sample_rng.manual_seed(42) # For reproducibility
+
+    while x.size(1) < max_length:
+        with torch.no_grad():
+            with torch.autocast(device_type=device, dtype=torch.bfloat16):
+                # Use raw_model to avoid DDP wrapper overhead
+                logits, _ = raw_model(x) 
+            
+            # Focus on the last token's logits
+            logits = logits[:, -1, :] 
+            probs = torch.softmax(logits, dim=-1)
+            
+            # Sample next token
+            next_token = torch.multinomial(probs, num_samples=1, generator=sample_rng)
+            x = torch.cat((x, next_token), dim=1)
+
+    # Print results
+    for i in range(num_return_sequences):
+        decoded = enc.decode(x[i].tolist())
+        print(f"Sample {i}: {decoded}")
 if ddp:
     dist.destroy_process_group()
 
-import sys;sys.exit(0)()
 
-
-#sampling
-
-
-#generate! x is (B,T)which is (5,8)
-torch.manual_seed(42)
-
-torch.cuda.manual_seed(42)
-
-while x.size(1)<max_length:
-    #Forward the model to get logits:
-    with torch.no_grad():
-        logits=model(x) #(B,T,vocab_size)
-        #take the logits at last position
-        logits=logits[:,-1,:]
-        #get the probabilies
-        probs=F.softmax(logits,-1)
-
-        topk_probs,topk_indicies=torch.topk(probs,50,dim=-1)
-        ix=torch.multinomial(topk_probs,1)
-        xcol=torch.gather(topk_indicies,-1,ix)
-        x=torch.cat([x,xcol],dim=-1)
-
-#Number sequences
-for i in range(num_return_sequences):
-    tokens=x[i,:max_length].tolist()
-    decoded=enc.decode(tokens)
-    print(">",decoded)
 
 
