@@ -280,6 +280,10 @@ for i in range(50):
 import sys;sys.exit(0)()
 
 
+#sampling
+
+import tiktoken
+enc=tiktoken.get_encoding('gpt2')
 
 #generate! x is (B,T)which is (5,8)
 torch.manual_seed(42)
