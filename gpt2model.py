@@ -303,6 +303,7 @@ while x.size(1)<max_length:
         xcol=torch.gather(topk_indicies,-1,ix)
         x=torch.cat([x,xcol],dim=-1)
 
+#Number sequences
 for i in range(num_return_sequences):
     tokens=x[i,:max_length].tolist()
     decoded=enc.decode(tokens)
