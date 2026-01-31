@@ -274,13 +274,13 @@ elif getattr(torch.backends,'mps') and torch.backends.mps.is_available():
 print(f"Running on device : {device}")
 
 total_batches=524288 # 2**19,close to 0.5 million batch size which is a power of 2
-micro_batch_size=4
+micro_batch_size=8
 T=1024
 grad_accum_steps=total_batches//(micro_batch_size*T)
 assert total_batches%micro_batch_size==0,"Total batches must be divisible must divide micro batch size"
 print(f"Calculated grad accum types: {grad_accum_steps}")
 
-train_loader=DataLoaderLite(B=4,T=1024)
+train_loader=DataLoaderLite(B=micro_batch_size,T=T)
 
 #Torch uses TF32
 torch.set_float32_matmul_precision('high')
